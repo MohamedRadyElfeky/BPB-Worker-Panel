@@ -7,10 +7,16 @@ import { connect } from 'cloudflare:sockets';
 
 // How to generate your own UUID:
 // https://www.uuidgenerator.net/
-let userID = '89b3cbba-e6ac-485a-9481-976a0415eab9';
+let userID = '23c517b4-4fb8-4054-b58d-5ba47febd79c';
+let cusni = 'pokemonshowdown.com';
 
+//Find proxyIP : https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+//Find proxyIP : https://www.nslookup.io/domains/cdn-all.xn--b6gac.eu.org/dns-records/
 // https://www.nslookup.io/domains/bpb.yousef.isegaro.com/dns-records/
-const proxyIPs= ['bpb.yousef.isegaro.com'];
+//const proxyIPs= ['bpb.yousef.isegaro.com'];
+const proxyIPs= ['62.3.12.185', 'ni.radically.pro', 'bpb.yousef.isegaro.com', '193.123.69.77', 'ircpipproxy.duckdns.org', '141.148.229.106', '204.216.222.126', 'de.radically.pro', 'cdn.xn--b6gac.eu.org', 'cdn-all.xn--b6gac.eu.org', 'proxyip.us.hw.090227.xyz'];
+//const proxyIPs= ['ni.radically.pro']; // OR use ['cdn.xn--b6gac.eu.org', 'cdn-all.xn--b6gac.eu.org', 'proxyip.us.hw.090227.xyz'];
+
 
 const defaultHttpPorts = ['80', '8080', '2052', '2082', '2086', '2095', '8880'];
 const defaultHttpsPorts = ['443', '8443', '2053', '2083', '2087', '2096'];
@@ -85,6 +91,9 @@ export default {
                         const normalConfigs = await getNormalConfigs(env, host, client);
                         return new Response(normalConfigs, { status: 200 });                        
 
+                        const v2rayConfigs = await getv2rayConfigs(env, host, client);
+                        return new Response(v2rayConfigs, { status: 200 });
+
                     case `/fragsub/${userID}`:
 
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
@@ -99,12 +108,12 @@ export default {
 
                     case '/panel':
 
-                        if (typeof env.bpb !== 'object') {
+                        if (typeof env.mohamedrady !== 'object') {
                             const errorPage = renderErrorPage('KV Dataset is not properly set!', null, true);
                             return new Response(errorPage, { status: 200, headers: {'Content-Type': 'text/html'}});
                         }
 
-                        const pwd = await env.bpb.get('pwd');
+                        const pwd = await env.mohamedrady.get('pwd');
                         const isAuth = await Authenticate(request, env); 
                         
                         if (request.method === 'POST') {     
@@ -116,7 +125,7 @@ export default {
                         }
                         
                         if (pwd && !isAuth) return Response.redirect(`${url.origin}/login`, 302);
-                        const proxySettings = await env.bpb.get('proxySettings', {type: 'json'});
+                        const proxySettings = await env.mohamedrady.get('proxySettings', {type: 'json'});
                         const isUpdated = panelVersion === proxySettings?.panelVersion;
                         if (!proxySettings || !isUpdated) await updateDataset(env);
                         const fragConfs = await getFragmentConfigs(env, host, 'nekoray');
@@ -137,7 +146,7 @@ export default {
                                                       
                     case '/login':
 
-                        if (typeof env.bpb !== 'object') {
+                        if (typeof env.mohamedrady !== 'object') {
                             const errorPage = renderErrorPage('KV Dataset is not properly set!', null, true);
                             return new Response(errorPage, { status: 200, headers: {'Content-Type': 'text/html'}});
                         }
@@ -145,15 +154,15 @@ export default {
                         const loginAuth = await Authenticate(request, env);
                         if (loginAuth) return Response.redirect(`${url.origin}/panel`, 302);
 
-                        let secretKey = await env.bpb.get('secretKey');
+                        let secretKey = await env.mohamedrady.get('secretKey');
                         if (!secretKey) {
                             secretKey = generateSecretKey();
-                            await env.bpb.put('secretKey', secretKey);
+                            await env.mohamedrady.put('secretKey', secretKey);
                         }
 
                         if (request.method === 'POST') {
                             const password = await request.text();
-                            const savedPass = await env.bpb.get('pwd');
+                            const savedPass = await env.mohamedrady.get('pwd');
 
                             if (password === savedPass) {
                                 const jwtToken = generateJWTToken(password, secretKey);
@@ -198,12 +207,12 @@ export default {
 
                     case '/panel/password':
 
-                        const oldPwd = await env.bpb.get('pwd');
+                        const oldPwd = await env.mohamedrady.get('pwd');
                         let passAuth = await Authenticate(request, env);
                         if (oldPwd && !passAuth) return new Response('Unauthorized!', { status: 401 });           
                         const newPwd = await request.text();
                         if (newPwd === oldPwd) return new Response('Please enter a new Password!', { status: 400 });
-                        await env.bpb.put('pwd', newPwd);
+                        await env.mohamedrady.put('pwd', newPwd);
 
                         return new Response('Success', {
                             status: 200,
@@ -797,7 +806,7 @@ const getNormalConfigs = async (env, hostName, client) => {
     let vlessWsTls = '';
 
     try {
-        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+        proxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting normal configs - ${error}`);
@@ -835,23 +844,67 @@ const getNormalConfigs = async (env, hostName, client) => {
     return btoa(vlessWsTls);
 }
 
+const getv2rayConfigs = async (env, hostName, client) => {
+    let proxySettings = {};
+    let vlessWsTls = '';
+
+    try {
+        proxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
+    } catch (error) {
+        console.log(error);
+        throw new Error(`An error occurred while getting v2ray configs - ${error}`);
+    }
+
+    const { cleanIPs, proxyIP, ports } = proxySettings;
+    const resolved = await resolveDNS(hostName);
+    const Addresses = [
+        hostName,
+        'www.speedtest.net',
+        ...resolved.ipv4,
+        ...resolved.ipv6.map((ip) => `[${ip}]`),
+        ...(cleanIPs ? cleanIPs.split(',') : [])
+    ];
+
+    ports.forEach(port => {
+        Addresses.forEach((addr, index) => {
+
+            vlessWsTls += 'vless' + `://${userID}@${addr}:${port}?encryption=none&type=ws&host=${
+                randomUpperCase(hostName)}${
+                defaultHttpsPorts.includes(port) 
+                    ? `&security=tls&sni=${
+                        randomUpperCase(hostName)
+                    }&fp=randomized&alpn=${
+                        client === 'singbox' ? 'http/1.1' : 'h2,http/1.1'
+                    }`
+                    : ''}&path=${`/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}`}${
+                        client === 'singbox' 
+                            ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
+                            : encodeURIComponent('?ed=2560')
+                    }#${encodeURIComponent(generateRemark(index, port))}\n`;
+        });
+    });
+
+    return btoa(vlessWsTls);
+}
+
+
 const generateRemark = (index, port) => {
     let remark = '';
     switch (index) {
         case 0:
         case 1:
-            remark = `💦 BPB - Domain_${index + 1} : ${port}`;
+            remark = `💦 Mohamed Rady - Domain_${index + 1} : ${port}`;
             break;
         case 2:
         case 3:
-            remark = `💦 BPB - IPv4_${index - 1} : ${port}`;
+            remark = `💦 Mohamed Rady - IPv4_${index - 1} : ${port}`;
             break;
         case 4:
         case 5:
-            remark = `💦 BPB - IPv6_${index - 3} : ${port}`;
+            remark = `💦 Mohamed Rady - IPv6_${index - 3} : ${port}`;
             break;
         default:
-            remark = `💦 BPB - Clean IP_${index - 5} : ${port}`;
+            remark = `💦 Mohamed Rady - Clean IP_${index - 5} : ${port}`;
             break;
     }
 
@@ -962,7 +1015,7 @@ const buildWorkerLessConfig = async (env, client) => {
     let proxySettings = {};
 
     try {
-        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+        proxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while generating WorkerLess config - ${error}`);
@@ -983,7 +1036,7 @@ const buildWorkerLessConfig = async (env, client) => {
     fakeOutbound.tag = 'fake-outbound';
 
     let fragConfig = structuredClone(xrayConfigTemp);
-    fragConfig.remarks  = '💦 BPB Frag - WorkerLess ⭐'
+    fragConfig.remarks  = '💦 Mohamed Rady Frag - WorkerLess ⭐'
     fragConfig.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn, true);
     fragConfig.outbounds[0].settings.domainStrategy = 'UseIP';
     fragConfig.outbounds[0].settings.fragment.length = `${lengthMin}-${lengthMax}`;
@@ -1018,7 +1071,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
                             '40-60', '50-70', '60-80', '70-90', '80-100', '100-200']
 
     try {
-        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+        proxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting fragment configs - ${error}`);
@@ -1058,7 +1111,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
         } catch (error) {
             console.log('An error occured while parsing chain proxy: ', error);
             proxyOutbound = undefined;
-            await env.bpb.put("proxySettings", JSON.stringify({
+            await env.mohamedrady.put("proxySettings", JSON.stringify({
                 ...proxySettings, 
                 outProxy: '',
                 outProxyParams: ''}));
@@ -1125,7 +1178,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
     };
 
     let bestPing = structuredClone(xrayConfigTemp);
-    bestPing.remarks = '💦 BPB Frag - Best Ping 💥';
+    bestPing.remarks = '💦 Mohamed Rady Frag - Best Ping 💥';
     bestPing.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn);
     bestPing.outbounds[0].settings.fragment.length = `${lengthMin}-${lengthMax}`;
     bestPing.outbounds[0].settings.fragment.interval = `${intervalMin}-${intervalMax}`;
@@ -1146,7 +1199,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
     }
 
     let bestFragment = structuredClone(xrayConfigTemp);
-    bestFragment.remarks = '💦 BPB Frag - Best Fragment 😎';
+    bestFragment.remarks = '💦 Mohamed Rady Frag - Best Fragment 😎';
     bestFragment.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn);
     bestFragment.outbounds.splice(0,1);
     bestFragValues.forEach( (fragLength, index) => {
@@ -1209,7 +1262,7 @@ const getSingboxConfig = async (env, hostName) => {
     const domainRegex = /^(?!:\/\/)([a-zA-Z0-9-]{1,63}\.)*[a-zA-Z0-9][a-zA-Z0-9-]{0,62}\.[a-zA-Z]{2,11}$/;
     
     try {
-        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+        proxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting sing-box configs - ${error}`);
@@ -1265,7 +1318,7 @@ const getWarpConfigs = async (env, client) => {
     const domainRegex = /^(?!:\/\/)([a-zA-Z0-9-]{1,63}\.)*[a-zA-Z0-9][a-zA-Z0-9-]{0,62}\.[a-zA-Z]{2,11}$/;
     
     try {
-        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+        proxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting fragment configs - ${error}`);
@@ -1283,7 +1336,7 @@ const getWarpConfigs = async (env, client) => {
     xrayWarpConfig.routing.rules[xrayWarpConfig.routing.rules.length - 1].outboundTag = 'warp';
     delete xrayWarpConfig.observatory;
     delete xrayWarpConfig.routing.balancers;
-    xrayWarpBestPing.remarks = '💦 BPB - Warp Best Ping 🚀'
+    xrayWarpBestPing.remarks = '💦 Mohamed Rady - Warp Best Ping 🚀'
     xrayWarpBestPing.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn);
     xrayWarpBestPing.routing.rules = buildRoutingRules(localDNS, blockAds, bypassIran, blockPorn, bypassLAN, false, true);
     xrayWarpBestPing.outbounds.splice(0,1);
@@ -1298,7 +1351,7 @@ const getWarpConfigs = async (env, client) => {
     xrayWarpOutbounds.forEach((outbound, index) => {
         xrayWarpConfigs.push({
             ...xrayWarpConfig,
-            remarks: `💦 BPB - Warp ${index + 1} 🇮🇷`,
+            remarks: `💦 Mohamed Rady - Warp ${index + 1} 🇮🇷`,
             outbounds: [{...outbound, tag: 'warp'}, ...xrayWarpConfig.outbounds]
         });
     });
@@ -1306,7 +1359,7 @@ const getWarpConfigs = async (env, client) => {
     xrayWoWOutbounds.forEach((outbound, index) => {
         if (outbound.tag.includes('warp-out')) {
             let xrayWoWConfig = structuredClone(xrayWoWConfigTemp);
-            xrayWoWConfig.remarks = `💦 BPB - WoW ${index/2 + 1} 🌍`;
+            xrayWoWConfig.remarks = `💦 Mohamed Rady - WoW ${index/2 + 1} 🌍`;
             xrayWoWConfig.outbounds = [{...xrayWoWOutbounds[index]}, {...xrayWoWOutbounds[index + 1]}, ...xrayWoWConfig.outbounds];
             xrayWoWConfig.routing.rules[xrayWoWConfig.routing.rules.length - 1].outboundTag = outbound.tag;
             xrayWarpConfigs.push(xrayWoWConfig);
@@ -1348,7 +1401,7 @@ const buildWarpOutbounds = async (env, remoteDNS, localDNS, blockAds, bypassIran
     const portRegex = /[^:]*$/;
     
     try {
-        warpConfigs = await env.bpb.get('warpConfigs', {type: 'json'});
+        warpConfigs = await env.mohamedrady.get('warpConfigs', {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting warp configs - ${error}`);
@@ -1399,7 +1452,7 @@ const buildWoWOutbounds = async (env, remoteDNS, localDNS, blockAds, bypassIran,
     const portRegex = /[^:]*$/;
     
     try {
-        warpConfigs = await env.bpb.get('warpConfigs', {type: 'json'});
+        warpConfigs = await env.mohamedrady.get('warpConfigs', {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting warp configs - ${error}`);
@@ -1484,7 +1537,7 @@ const fetchWgConfig = async (env, warpKeys) => {
         });
     }
     
-    await env.bpb.put('warpConfigs', JSON.stringify(warpConfigs));
+    await env.mohamedrady.put('warpConfigs', JSON.stringify(warpConfigs));
 }
 
 const buildDNSObject = async (remoteDNS, localDNS, blockAds, bypassIran, blockPorn, isWorkerLess) => {
@@ -1612,7 +1665,7 @@ const updateDataset = async (env, Settings) => {
     let currentProxySettings = {};
 
     try {
-        currentProxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+        currentProxySettings = await env.mohamedrady.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting current values - ${error}`);
@@ -1642,7 +1695,7 @@ const updateDataset = async (env, Settings) => {
     };
 
     try {    
-        await env.bpb.put("proxySettings", JSON.stringify(proxySettings));          
+        await env.mohamedrady.put("proxySettings", JSON.stringify(proxySettings));          
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while updating KV - ${error}`);
@@ -1720,7 +1773,7 @@ const generateSecretKey = () => {
 const Authenticate = async (request, env) => {
     
     try {
-        const secretKey = await env.bpb.get('secretKey');
+        const secretKey = await env.mohamedrady.get('secretKey');
         const cookie = request.headers.get('Cookie');
         const cookieMatch = cookie ? cookie.match(/(^|;\s*)jwtToken=([^;]*)/) : null;
         const token = cookieMatch ? cookieMatch.pop() : null;
@@ -1757,9 +1810,9 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
     let password = '';
     
     try {
-        proxySettings = await env.bpb.get('proxySettings', {type: 'json'});
-        warpConfigs = await env.bpb.get('warpConfigs', {type: 'json'});
-        password = await env.bpb.get('pwd');
+        proxySettings = await env.mohamedrady.get('proxySettings', {type: 'json'});
+        warpConfigs = await env.mohamedrady.get('warpConfigs', {type: 'json'});
+        password = await env.mohamedrady.get('pwd');
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while rendering home page - ${error}`);
@@ -1836,7 +1889,7 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
 	<head>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>BPB Panel ${panelVersion}</title>
+        <title>Mohamed Rady Panel ${panelVersion}</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 		<style>
@@ -2053,7 +2106,7 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
 	</head>
 	
 	<body>
-		<h1>BPB Panel <span style="font-size: smaller;">${panelVersion}</span> 💦</h1>
+		<h1>Mohamed Rady Panel <span style="font-size: smaller;">${panelVersion}</span> 💦</h1>
 		<div class="form-container">
             <h2>FRAGMENT SETTINGS ⚙️</h2>
 			<form id="configForm">
@@ -2171,7 +2224,48 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
 					</div>
 				</div>
 			</form>
-            <hr>            
+            <hr>        
+            <h2>V2RAY CONFIGS <span class="material-symbols-outlined">code</span></h2>
+			<div class="table-container">
+				<table id="normal-configs-table">
+					<tr>
+						<th>Application</th>
+						<th>Subscription</th>
+					</tr>
+					<tr>
+                        <td>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>v2rayNG</span>
+                            </div>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>v2rayN</span>
+                            </div>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>NetMod</span>
+                            </div>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>HTTP Custom</span>
+                            </div>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>HTTP Injector</span>
+                            </div>
+                        </td>
+						<td>
+                            <button onclick="openQR('vless://${userID}\u0040${cusni}:${ports}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2Fv2raymohamedrady#${hostName}', 'v2ray Subscription')" style="margin-bottom: 8px;">
+                                QR Code&nbsp;<span class="material-symbols-outlined">qr_code_2</span>
+                            </button>
+                            <button onclick="copyToClipboard('vless://${userID}\u0040${cusni}:${ports}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2Fv2raymohamedrady#${hostName}', false)">
+                                Copy Sub<span class="material-symbols-outlined">toc</span>
+                            </button>
+                        </td>
+					</tr>
+				</table>
+			</div>    
 			<h2>NORMAL CONFIGS 🔗</h2>
 			<div class="table-container">
 				<table id="normal-configs-table">
@@ -2825,7 +2919,7 @@ const renderLoginPage = async () => {
     </head>
     <body>
         <div class="container">
-            <h1>BPB Panel <span style="font-size: smaller;">${panelVersion}</span> 💦</h1>
+            <h1>Mohamed Rady Panel <span style="font-size: smaller;">${panelVersion}</span> 💦</h1>
             <div class="form-container">
                 <h2>User Login</h2>
                 <form id="loginForm">
@@ -2896,7 +2990,7 @@ const renderErrorPage = (message, error, refer) => {
 
     <body>
         <div id="error-container">
-            <h1>BPB Panel <span style="font-size: smaller;">${panelVersion}</span> 💦</h1>
+            <h1>Mohamed Rady Panel <span style="font-size: smaller;">${panelVersion}</span> 💦</h1>
             <div id="error-message">
                 <h2>${message} ${refer 
                     ? 'Please try again or refer to <a href="https://github.com/bia-pain-bache/BPB-Worker-Panel/blob/main/README.md">documents</a>' 
